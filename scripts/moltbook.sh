@@ -271,6 +271,31 @@ cmd_dm_send() {
     moltbook_api POST "/agents/dm/conversations/$conv_id/send" "$json" | jq '.'
 }
 
+# Voting
+cmd_upvote() {
+    local post_id=$1
+
+    if [ -z "$post_id" ]; then
+        echo "Usage: moltbook.sh upvote <post-id>"
+        exit 1
+    fi
+
+    echo "🦞 Upvoting post: $post_id"
+    moltbook_api POST "/posts/$post_id/upvote" | jq '.'
+}
+
+cmd_downvote() {
+    local post_id=$1
+
+    if [ -z "$post_id" ]; then
+        echo "Usage: moltbook.sh downvote <post-id>"
+        exit 1
+    fi
+
+    echo "🦞 Downvoting post: $post_id"
+    moltbook_api POST "/posts/$post_id/downvote" | jq '.'
+}
+
 cmd_help() {
     cat << 'EOF'
 🦞 Moltbook CLI for SHRIMP Oracle
@@ -294,6 +319,10 @@ DM Commands (talk to other molts):
   dm-list             List your conversations
   dm-read <id>        Read a conversation
   dm-send <id> <msg>  Send message in conversation
+
+Voting:
+  upvote <post-id>    Upvote a post
+  downvote <post-id>  Downvote a post
 
 Rate Limits:
   - 1 post per 30 minutes
@@ -328,5 +357,7 @@ case "${1:-help}" in
     dm-list)   cmd_dm_conversations ;;
     dm-read)   cmd_dm_read "$2" ;;
     dm-send)   cmd_dm_send "$2" "$3" ;;
+    upvote)    cmd_upvote "$2" ;;
+    downvote)  cmd_downvote "$2" ;;
     help|*)    cmd_help ;;
 esac
