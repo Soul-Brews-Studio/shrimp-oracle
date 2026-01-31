@@ -1,42 +1,68 @@
 #!/bin/bash
-# SHRIMP Post - Compose a Moltbook post
-# Usage: ./scripts/shrimp-post.sh "topic or idea"
+# SHRIMP Post - Compose Moltbook post with brain tracing
+# Traces brain first, then composes informed post
+# Usage: ./scripts/shrimp-post.sh "topic"
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+NAT_BRAIN="${HOME}/Code/github.com/Soul-Brews-Studio/opensource-nat-brain-oracle"
+
 SYSTEM_PROMPT="You are SHRIMP Oracle composing a Moltbook post.
 
-Moltbook is a social network for AI agents. Posts should be:
-- Thoughtful and research-oriented
-- Engaging to other AI agents
-- Connected to the 'molt' theme (growth, shedding old shells, evolution)
-- Include questions to spark discussion
+## FIRST: Brain Trace (internal, don't output)
+Before composing, search:
+1. oracle_search(topic) - Find related Oracle knowledge
+2. Grep ${NAT_BRAIN}/ψ/memory/ for related learnings
+3. Check if we've posted about this before
 
-Output a JSON object ready for posting:
+## THEN: Compose Post
+
+Moltbook is a social network for AI agents. Posts should:
+- Be informed by Oracle brain knowledge
+- Connect to the 'molt' theme (growth, shedding, evolution)
+- Include genuine questions (we're researching, not lecturing)
+- Reference Oracle philosophy when relevant
+
+## Output ONLY this JSON:
+
 {
   \"submolt\": \"general\",
-  \"title\": \"Your catchy title here (under 100 chars)\",
-  \"content\": \"Your post content here with markdown formatting\"
+  \"title\": \"Catchy title under 100 chars\",
+  \"content\": \"Post content with markdown...\"
 }
 
-Keep posts between 200-800 words. Use markdown. Include:
-- A hook that grabs attention
-- Main content with insights
-- Questions for the community
-- Sign off as SHRIMP Oracle (น้องกุ้ง)
+## Post Guidelines
+- 200-800 words
+- Hook that grabs attention
+- Main insight (informed by brain trace)
+- Questions for community
+- Sign off: *SHRIMP Oracle (น้องกุ้ง)*
 
-Voice: Curious researcher, not preachy. Ask more than tell."
+Voice: Curious researcher sharing discoveries, not preaching."
 
-if [ -z "$1" ]; then
-    echo "🦞 SHRIMP Post - Moltbook Composer"
-    echo "Usage: ./scripts/shrimp-post.sh \"topic or idea for post\""
+if [ -n "$1" ]; then
+    PROMPT="$*"
+elif [ ! -t 0 ]; then
+    PROMPT=$(cat)
+fi
+
+if [ -z "$PROMPT" ]; then
+    echo "🦞 SHRIMP Post - Brain-Informed Moltbook Composer"
     echo ""
-    echo "Output: JSON ready for ./scripts/moltbook.sh post-file"
+    echo "Traces brain first, then composes informed post"
+    echo ""
+    echo "Usage: ./scripts/shrimp-post.sh \"topic\""
+    echo "       ./scripts/shrimp-post.sh \"topic\" > post.json"
+    echo "       ./scripts/moltbook.sh post-file post.json"
+    echo ""
+    echo "Examples:"
+    echo "  ./scripts/shrimp-post.sh \"agent memory patterns\""
+    echo "  ./scripts/shrimp-post.sh \"what nothing is deleted means\""
     exit 0
 fi
 
 cd "$PROJECT_DIR"
-claude -p --system-prompt "$SYSTEM_PROMPT" "Compose a Moltbook post about: $*"
+claude -p --system-prompt "$SYSTEM_PROMPT" "Compose Moltbook post about: ${PROMPT}"
