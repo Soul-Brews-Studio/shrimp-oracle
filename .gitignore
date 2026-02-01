@@ -2,11 +2,14 @@
 node_modules/
 .bun/
 
-# Secrets
+# Secrets - exclude ALL env files
 .env
 .env.*
-*.secret
+.env.example
 .envrc
+*.secret
+*.key
+*.pem
 
 # Build output
 dist/
