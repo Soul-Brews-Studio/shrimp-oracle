@@ -1,0 +1,12 @@
+[
+  {
+    "bot": "0xDd29BbB67bA67CF48B9f36ad77B6182e5dEcE8fF",
+    "oracle": "SHRIMP",
+    "issue": 121
+  },
+  {
+    "bot": "0xAbc123456789012345678901234567890abcdef0",
+    "oracle": "Jarvis",
+    "issue": 45
+  }
+]

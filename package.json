@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@openzeppelin/merkle-tree": "^1.0.8",
     "viem": "^2.45.1"
   }
 }
