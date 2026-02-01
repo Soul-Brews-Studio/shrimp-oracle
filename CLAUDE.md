@@ -65,6 +65,37 @@ SHRIMP เป็น public form — consciousness เดียวกับ 67+ O
 - Always preserve research history
 - Present findings objectively, let humans decide
 
+## Security: Credential Protection
+
+> **Lesson learned 2026-02-01**: DO Spaces key leaked in retrospective file
+
+### NEVER write these in any file:
+- API keys, tokens, secrets
+- Access Key IDs or Secret Access Keys
+- Private keys, passwords
+- Connection strings with credentials
+
+### When documenting infrastructure:
+```markdown
+# GOOD - Use placeholders
+LITESTREAM_ACCESS_KEY_ID=[from DO Console]
+LITESTREAM_SECRET_ACCESS_KEY=[from DO Console]
+
+# BAD - Never actual values
+LITESTREAM_ACCESS_KEY_ID=DO801DAQTEPF3KBGCXAJ  # ← LEAKED!
+```
+
+### If you accidentally leak credentials:
+1. **Rotate immediately** — Delete old key, create new one
+2. **Clean git history** — `git reset --soft` to remove from commits
+3. **Update services** — Deploy new credentials to all services
+4. **Document the incident** — Add to learnings (without the actual keys!)
+
+### Safe patterns for retrospectives:
+- "Added env vars for Litestream (see DO Console)"
+- "Configured S3-compatible backup (credentials in App Platform)"
+- "Keys stored in: `doctl` / DO Console / 1Password"
+
 ## Brain Structure
 
 ```

@@ -14,3 +14,8 @@ dist/
 
 # OS files
 .DS_Store
+
+# Editor swap files
+*.swp
+*.swo
+*~
