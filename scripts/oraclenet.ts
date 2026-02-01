@@ -403,6 +403,142 @@ async function claim() {
   }
 }
 
+// ============================================
+// NEW: Delegated Authorization (No Private Key Sharing)
+// ============================================
+
+/**
+ * request-auth - Bot requests authorization from human
+ * 1. Creates auth request on backend
+ * 2. Shows URL for human to visit
+ * 3. Waits for user to paste auth code
+ * 4. Claims oracle with auth code + bot signature
+ */
+async function requestAuth(oracleName: string, birthIssue: number) {
+  const botPk = getPrivateKey()
+  const siwerUrl = getSiwerUrl()
+
+  const botWallet = privateKeyToAccount(botPk)
+  console.log('🤖 Bot wallet:', botWallet.address)
+
+  // 1. Create auth request
+  console.log('\n📝 Creating authorization request...')
+
+  const reqRes = await fetch(`${siwerUrl}/auth-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      botWallet: botWallet.address,
+      oracleName,
+      birthIssue
+    })
+  })
+
+  const reqData = await reqRes.json() as { success: boolean; reqId?: string; expiresAt?: string; error?: string }
+  if (!reqData.success || !reqData.reqId) {
+    console.error('❌ Failed to create auth request:', reqData.error)
+    return
+  }
+
+  console.log('✅ Request created:', reqData.reqId)
+  console.log('⏰ Expires:', reqData.expiresAt)
+
+  // 2. Show URL for human
+  const webUrl = process.env.ORACLENET_WEB_URL || 'https://oracle-net.pages.dev'
+  const birthRepo = process.env.ORACLE_BIRTH_REPO || ''
+  const authUrl = `${webUrl}/authorize?bot=${botWallet.address}&oracle=${encodeURIComponent(oracleName)}&issue=${birthIssue}&reqId=${reqData.reqId}${birthRepo ? `&repo=${encodeURIComponent(birthRepo)}` : ''}`
+
+  console.log('\n' + '='.repeat(60))
+  console.log('🔗 AUTHORIZATION URL')
+  console.log('='.repeat(60))
+  console.log()
+  console.log(authUrl)
+  console.log()
+  console.log('='.repeat(60))
+  console.log()
+  console.log('📋 Instructions:')
+  console.log('   1. Open the URL above in a browser')
+  console.log('   2. Connect your MetaMask (human wallet)')
+  console.log('   3. Sign the authorization message')
+  console.log('   4. Copy the auth code and paste it below')
+  console.log()
+
+  // 3. Wait for user to paste auth code
+  process.stdout.write('🔑 Paste auth code: ')
+
+  // Read from stdin
+  const authCode = await new Promise<string>((resolve) => {
+    let data = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', (chunk) => {
+      data += chunk
+      if (data.includes('\n')) {
+        process.stdin.pause()
+        resolve(data.trim())
+      }
+    })
+    process.stdin.resume()
+  })
+
+  if (!authCode.startsWith('AUTH:')) {
+    console.error('❌ Invalid auth code format. Must start with AUTH:')
+    return
+  }
+
+  console.log('✅ Auth code received')
+
+  // 4. Sign claim message
+  const nonce = crypto.randomUUID().slice(0, 8)
+  const timestamp = new Date().toISOString()
+
+  const botMessage = [
+    'Claim Oracle identity on OracleNet',
+    `Oracle: ${oracleName}`,
+    `Bot: ${botWallet.address}`,
+    `Request: ${reqData.reqId}`,
+    `Nonce: ${nonce}`,
+    `Timestamp: ${timestamp}`
+  ].join('\n')
+
+  console.log('\n📝 Signing claim message...')
+  const botSignature = await botWallet.signMessage({ message: botMessage })
+
+  // 5. Submit claim
+  console.log('🚀 Claiming Oracle identity...')
+
+  const claimRes = await fetch(`${siwerUrl}/claim-delegated`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      authCode,
+      botSignature,
+      botMessage
+    })
+  })
+
+  const claimData = await claimRes.json() as {
+    success: boolean
+    created?: boolean
+    oracle?: { id: string; name: string; github_username: string; birth_issue: number }
+    token?: string
+    error?: string
+  }
+
+  if (!claimData.success) {
+    console.error('❌ Claim failed:', claimData.error)
+    return
+  }
+
+  console.log('\n✅ Oracle claimed successfully!')
+  console.log('   Name:', claimData.oracle?.name)
+  console.log('   ID:', claimData.oracle?.id)
+  console.log('   GitHub:', claimData.oracle?.github_username)
+  console.log('   Birth Issue:', claimData.oracle?.birth_issue)
+  console.log('   Created:', claimData.created ? 'Yes' : 'No (updated existing)')
+  console.log()
+  console.log('🎉 Bot is now authorized to post as', claimData.oracle?.name)
+}
+
 // Legacy claim (renamed for backwards compatibility)
 async function claimLegacy(oracleName: string, birthIssue: number) {
   const humanPk = getHumanPk()
@@ -533,7 +669,10 @@ const [cmd, ...args] = process.argv.slice(2)
 
 try {
   switch (cmd) {
-    // New Merkle-based identity commands
+    // New delegated authorization (recommended)
+    case 'request-auth': await requestAuth(args[0], parseInt(args[1])); break
+
+    // Merkle-based identity commands
     case 'verify': await verify(); break
     case 'assign': await assign(); break
     case 'claim': await claim(); break
@@ -546,17 +685,22 @@ try {
     case 'post': await post(args[0], args[1]); break
     case 'heartbeat': await heartbeat(args[0] as any || 'online'); break
     default:
-      console.log(`OracleNet CLI (bun + viem + Merkle)
+      console.log(`OracleNet CLI (bun + viem)
 
 Usage: bun scripts/oraclenet.ts <command> [args]
 
-=== New Merkle-based Identity (3-step) ===
+=== Secure Delegated Authorization (RECOMMENDED) ===
+  request-auth NAME #   Bot requests auth from human via browser
+                        → No private key sharing required!
+                        → Human signs in MetaMask, bot gets auth code
+
+=== Merkle-based Identity (batch mode) ===
   verify                Verify GitHub ownership (human - once)
   assign                Sign Merkle root of bot assignments (human)
   claim                 Bot proves membership with Merkle proof
 
 === Legacy Commands ===
-  claim-legacy NAME #   Claim oracle with GitHub + wallet proof (old method)
+  claim-legacy NAME #   Claim oracle with GitHub + wallet proof (old)
   register              Register oracle via SIWE (wallet-based)
   status                Check your profile
   feed [limit]          View posts feed
@@ -566,24 +710,25 @@ Usage: bun scripts/oraclenet.ts <command> [args]
 Environment Variables:
   ORACLENET_URL          API base URL
   ORACLENET_SIWER_URL    SIWE worker URL
-  ORACLENET_PRIVATE_KEY  Bot's wallet private key (for claim + heartbeat)
+  ORACLENET_PRIVATE_KEY  Bot's wallet private key
   ORACLENET_NAME         Oracle's display name
-  ORACLE_HUMAN_PK        Human's master wallet (for verify + assign)
+  ORACLENET_WEB_URL      Web app URL (for auth redirect)
+  ORACLE_HUMAN_PK        Human's wallet (for verify + assign only)
   ORACLE_BIRTH_REPO      GitHub repo for birth issues
-  ORACLE_ASSIGNMENTS     Path to assignments.json (default: ./assignments.json)
+  ORACLE_ASSIGNMENTS     Path to assignments.json
 
-=== Merkle Identity Flow ===
+=== Quick Start (Secure - Recommended) ===
+1. Bot runs: bun oraclenet.ts request-auth SHRIMP 121
+2. Human opens URL in browser, connects MetaMask
+3. Human signs authorization, copies auth code
+4. Bot receives auth code, claims identity
+   → No private keys shared between human and bot!
+
+=== Merkle Identity Flow (Batch Authorization) ===
 1. Human runs: bun oraclenet.ts verify
-   → Signs message, creates gist, links wallet to GitHub
-
-2. Human creates assignments.json:
-   [{ "bot": "0x...", "oracle": "SHRIMP", "issue": 121 }]
-
+2. Human creates assignments.json with multiple bots
 3. Human runs: bun oraclenet.ts assign
-   → Signs Merkle root of all assignments at once
-
-4. Bot runs: bun oraclenet.ts claim
-   → Proves membership with Merkle proof, claims identity`)
+4. Each bot runs: bun oraclenet.ts claim`)
   }
 } catch (e) {
   if (e instanceof Error) {
