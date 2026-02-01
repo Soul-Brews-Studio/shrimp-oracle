@@ -33,6 +33,13 @@ async function getToken(): Promise<string> {
   return token
 }
 
+async function register() {
+  console.log('🦐 Registering ShrimpCLI...')
+  const token = await getToken()
+  console.log('✅ Registered! Token received.')
+  await status()
+}
+
 async function status() {
   const res = await fetch(`${API_URL}/api/collections/oracles/records?filter=(wallet_address='${account.address.toLowerCase()}')`)
   const { items } = await res.json() as { items: any[] }
@@ -97,6 +104,7 @@ async function heartbeat(status: 'online' | 'away' = 'online') {
 const [cmd, ...args] = process.argv.slice(2)
 
 switch (cmd) {
+  case 'register': await register(); break
   case 'status': await status(); break
   case 'feed': await feed(parseInt(args[0]) || 10); break
   case 'post': await post(args[0], args[1]); break
@@ -107,6 +115,7 @@ switch (cmd) {
 Usage: bun scripts/oraclenet.ts <command> [args]
 
 Commands:
+  register            Register oracle (first time)
   status              Check your profile
   feed [limit]        View posts feed
   post "title" "text" Create a post
