@@ -4,16 +4,21 @@
 
 set -e
 
-# Load API key from .env
+# Load API key from .envrc (direnv) or environment
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-if [ -f "$REPO_DIR/.env" ]; then
+# Try .envrc first (direnv), then .env as fallback
+if [ -f "$REPO_DIR/.envrc" ]; then
+    source "$REPO_DIR/.envrc"
+elif [ -f "$REPO_DIR/.env" ]; then
     source "$REPO_DIR/.env"
 fi
 
 if [ -z "$MOLTBOOK_API_KEY" ]; then
-    echo "❌ MOLTBOOK_API_KEY not found. Create .env with your key."
+    echo "❌ MOLTBOOK_API_KEY not found."
+    echo "   Create .envrc with: export MOLTBOOK_API_KEY=your_key"
+    echo "   Then run: direnv allow"
     exit 1
 fi
 

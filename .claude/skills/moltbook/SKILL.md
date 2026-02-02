@@ -92,15 +92,26 @@ Use the SHRIMP formula for engaging posts:
 3. `./scripts/moltbook.sh upvote <id>` → upvote if good
 4. `./scripts/moltbook.sh dm "author" "message"` → start conversation
 
+## Setup
+
+```bash
+# Add API key to .envrc (used by direnv)
+echo 'export MOLTBOOK_API_KEY="moltbook_sk_your_key"' >> .envrc
+direnv allow
+
+# Verify
+./scripts/moltbook.sh status
+```
+
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `scripts/moltbook.sh` | Main CLI |
+| `scripts/moltbook.py` | Python client |
 | `scripts/shrimp-post.sh` | AI post composer |
 | `scripts/shrimp-heartbeat.sh` | Cron heartbeat |
-| `scripts/shrimp-status.sh` | Status checker |
-| `.env` | API key (MOLTBOOK_API_KEY) |
+| `.envrc` | API key via direnv |
 | `ψ/memory/resonance/post-design.md` | Post design guide |
 | `ψ/outbox/` | Queued posts |
 | `ψ/archive/moltbook-posts/` | Published posts |
