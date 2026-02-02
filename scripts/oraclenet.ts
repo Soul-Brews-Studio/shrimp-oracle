@@ -33,6 +33,37 @@ function getAccount() {
 // Types
 type Assignment = { bot: string; oracle: string; issue: number }
 
+// Parse assignments file (supports JSON, JSONL, CSV)
+async function loadAssignments(filePath: string): Promise<Assignment[]> {
+  const content = await Bun.file(filePath).text()
+  const trimmed = content.trim()
+
+  // JSONL: one JSON object per line
+  if (filePath.endsWith('.jsonl') || (!trimmed.startsWith('[') && trimmed.includes('\n{"'))) {
+    return trimmed
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line))
+  }
+
+  // CSV: header + rows
+  if (filePath.endsWith('.csv') || trimmed.startsWith('bot,')) {
+    const lines = trimmed.split('\n').filter(line => line.trim())
+    const header = lines[0].split(',')
+    return lines.slice(1).map(line => {
+      const values = line.split(',')
+      return {
+        bot: values[header.indexOf('bot')],
+        oracle: values[header.indexOf('oracle')],
+        issue: parseInt(values[header.indexOf('issue')])
+      }
+    })
+  }
+
+  // JSON array (default)
+  return JSON.parse(trimmed)
+}
+
 // Leaf encoding for OZ Merkle tree
 const LEAF_ENCODING: string[] = ['address', 'string', 'uint256']
 
@@ -228,18 +259,21 @@ async function assign() {
   const siwerUrl = getSiwerUrl()
   const assignmentsFile = getAssignmentsFile()
 
-  // Load assignments
+  // Load assignments (supports .json, .jsonl, .csv)
   let assignments: Assignment[]
   try {
-    const content = await Bun.file(assignmentsFile).text()
-    assignments = JSON.parse(content)
+    assignments = await loadAssignments(assignmentsFile)
   } catch (e) {
     console.error(`❌ Failed to load assignments from ${assignmentsFile}`)
-    console.log('\nCreate an assignments.json file like:')
-    console.log(JSON.stringify([
-      { bot: '0xDd29...', oracle: 'SHRIMP', issue: 121 },
-      { bot: '0xAbc1...', oracle: 'Jarvis', issue: 45 }
-    ], null, 2))
+    console.log('\nSupported formats:')
+    console.log('\n.json:')
+    console.log('[{"bot":"0xDd29...","oracle":"SHRIMP","issue":121}]')
+    console.log('\n.jsonl:')
+    console.log('{"bot":"0xDd29...","oracle":"SHRIMP","issue":121}')
+    console.log('{"bot":"0xAbc1...","oracle":"Jarvis","issue":45}')
+    console.log('\n.csv:')
+    console.log('bot,oracle,issue')
+    console.log('0xDd29...,SHRIMP,121')
     return
   }
 
@@ -317,8 +351,7 @@ async function claim() {
   // Load assignments to find our leaf and generate proof
   let assignments: Assignment[]
   try {
-    const content = await Bun.file(assignmentsFile).text()
-    assignments = JSON.parse(content)
+    assignments = await loadAssignments(assignmentsFile)
   } catch (e) {
     console.error(`❌ Failed to load assignments from ${assignmentsFile}`)
     return
