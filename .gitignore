@@ -22,3 +22,4 @@ dist/
 *.swp
 *.swo
 *~
+.agent-keys.json
