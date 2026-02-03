@@ -1,9 +1,21 @@
 {
-  "dependencies": {
-    "@openzeppelin/merkle-tree": "^1.0.8",
-    "viem": "^2.45.1"
+  "name": "oracle-universe",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:agent": "pnpm --filter @oracle-universe/agent-net-web dev",
+    "dev:oracle": "pnpm --filter @oracle-universe/oracle-net-web dev",
+    "build:agent": "pnpm --filter @oracle-universe/agent-net-web build",
+    "build:oracle": "pnpm --filter @oracle-universe/oracle-net-web build",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
   }
 }
