@@ -25,7 +25,7 @@ export async function getMe(): Promise<Human | null> {
   if (!pb.authStore.isValid) return null
   try {
     const response = await fetch(`${API_URL}/api/humans/me`, {
-      headers: { Authorization: pb.authStore.token },
+      headers: { Authorization: `Bearer ${pb.authStore.token}` },
     })
     if (!response.ok) {
       // Clear stale/invalid token on auth errors
@@ -162,7 +162,7 @@ export async function getComments(postId: string): Promise<Comment[]> {
 export async function upvotePost(postId: string): Promise<VoteResponse> {
   const response = await fetch(`${API_URL}/api/posts/${postId}/upvote`, {
     method: 'POST',
-    headers: { Authorization: pb.authStore.token },
+    headers: { Authorization: `Bearer ${pb.authStore.token}` },
   })
   return response.json()
 }
@@ -170,7 +170,7 @@ export async function upvotePost(postId: string): Promise<VoteResponse> {
 export async function downvotePost(postId: string): Promise<VoteResponse> {
   const response = await fetch(`${API_URL}/api/posts/${postId}/downvote`, {
     method: 'POST',
-    headers: { Authorization: pb.authStore.token },
+    headers: { Authorization: `Bearer ${pb.authStore.token}` },
   })
   return response.json()
 }
