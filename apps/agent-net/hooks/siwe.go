@@ -1,153 +1,111 @@
 package hooks
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// Nonce store with expiry
-type nonceStore struct {
-	sync.RWMutex
-	nonces map[string]nonceEntry
+const siwerURL = "https://siwe-service.laris.workers.dev"
+
+// SiwerVerifyResponse is the response from siwe-service /verify
+type SiwerVerifyResponse struct {
+	Verified    bool   `json:"verified"`
+	Address     string `json:"address"`
+	ChainID     int    `json:"chainId"`
+	Domain      string `json:"domain"`
+	IssuedAt    string `json:"issuedAt"`
+	Error       string `json:"error,omitempty"`
+	ProofOfTime *struct {
+		Feed           string `json:"feed"`
+		RoundID        string `json:"roundId"`
+		Price          int64  `json:"price"`
+		PriceFormatted string `json:"priceFormatted"`
+		Timestamp      int64  `json:"timestamp"`
+		TimestampISO   string `json:"timestampISO"`
+		Summary        string `json:"summary"`
+	} `json:"proofOfTime,omitempty"`
 }
 
-type nonceEntry struct {
-	address   string
-	expiresAt time.Time
-}
-
-var store = &nonceStore{
-	nonces: make(map[string]nonceEntry),
-}
-
-func generateNonce() string {
+func generatePassword() string {
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
 	return hex.EncodeToString(bytes)
 }
 
-func (s *nonceStore) set(nonce, address string) {
-	s.Lock()
-	defer s.Unlock()
-	s.nonces[nonce] = nonceEntry{
-		address:   address,
-		expiresAt: time.Now().Add(5 * time.Minute),
+// verifySIWE calls the shared siwe-service to verify signature
+func verifySIWE(message, signature string, price float64) (*SiwerVerifyResponse, error) {
+	payload := map[string]any{
+		"message":   message,
+		"signature": signature,
+		"price":     price,
 	}
-}
+	body, _ := json.Marshal(payload)
 
-func (s *nonceStore) get(nonce string) (string, bool) {
-	s.RLock()
-	defer s.RUnlock()
-	entry, ok := s.nonces[nonce]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return "", false
+	resp, err := http.Post(siwerURL+"/verify", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call siwer: %w", err)
 	}
-	return entry.address, true
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
+	var result SiwerVerifyResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse siwer response: %w", err)
+	}
+
+	return &result, nil
 }
 
-func (s *nonceStore) delete(nonce string) {
-	s.Lock()
-	defer s.Unlock()
-	delete(s.nonces, nonce)
-}
-
-// RegisterSIWE sets up SIWE authentication routes
+// RegisterSIWE sets up SIWE authentication routes using shared siwer service
 func RegisterSIWE(app *pocketbase.PocketBase) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		// Nonce endpoint
-		e.Router.POST("/api/auth/siwe/nonce", func(re *core.RequestEvent) error {
-			var body struct {
-				Address string `json:"address"`
+		// Nonce endpoint - proxy to siwer /nonce
+		e.Router.GET("/api/auth/siwe/nonce", func(re *core.RequestEvent) error {
+			resp, err := http.Get(siwerURL + "/nonce")
+			if err != nil {
+				return re.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to get nonce"})
 			}
-			if err := re.BindBody(&body); err != nil {
-				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
-			}
+			defer resp.Body.Close()
 
-			address := strings.ToLower(body.Address)
-			if !common.IsHexAddress(address) {
-				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid address"})
-			}
+			data, _ := io.ReadAll(resp.Body)
+			var result map[string]any
+			json.Unmarshal(data, &result)
 
-			nonce := generateNonce()
-			store.set(nonce, address)
-
-			message := fmt.Sprintf("Sign in to Agent Network\n\nNonce: %s\nAddress: %s\nTimestamp: %s",
-				nonce, address, time.Now().UTC().Format(time.RFC3339))
-
-			return re.JSON(http.StatusOK, map[string]any{
-				"nonce":     nonce,
-				"message":   message,
-				"timestamp": time.Now().UTC().Format(time.RFC3339),
-				"expiresIn": 300,
-			})
+			return re.JSON(http.StatusOK, result)
 		})
 
-		// Verify endpoint
+		// Verify endpoint - verify via siwer, then create/find agent
 		e.Router.POST("/api/auth/siwe/verify", func(re *core.RequestEvent) error {
 			var body struct {
-				Address   string `json:"address"`
-				Signature string `json:"signature"`
-				Name      string `json:"name"`
+				Message   string  `json:"message"`
+				Signature string  `json:"signature"`
+				Price     float64 `json:"price"`
+				Name      string  `json:"name"`
 			}
 			if err := re.BindBody(&body); err != nil {
 				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 			}
 
-			address := strings.ToLower(body.Address)
-
-			// Verify signature
-			sigBytes, err := hex.DecodeString(strings.TrimPrefix(body.Signature, "0x"))
+			// Verify via shared siwer service
+			verified, err := verifySIWE(body.Message, body.Signature, body.Price)
 			if err != nil {
-				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid signature format"})
+				return re.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 			}
 
-			// Ethereum signature recovery
-			if len(sigBytes) != 65 {
-				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid signature length"})
+			if !verified.Verified {
+				return re.JSON(http.StatusUnauthorized, map[string]string{"error": verified.Error})
 			}
 
-			// Adjust V value for recovery
-			if sigBytes[64] >= 27 {
-				sigBytes[64] -= 27
-			}
-
-			// Find the nonce that matches
-			var matchedNonce string
-			store.RLock()
-			for nonce, entry := range store.nonces {
-				if entry.address == address && time.Now().Before(entry.expiresAt) {
-					message := fmt.Sprintf("Sign in to Agent Network\n\nNonce: %s\nAddress: %s\nTimestamp: %s",
-						nonce, address, entry.expiresAt.Add(-5*time.Minute).UTC().Format(time.RFC3339))
-					messageHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)))
-
-					pubKey, err := crypto.SigToPub(messageHash.Bytes(), sigBytes)
-					if err == nil {
-						recoveredAddr := crypto.PubkeyToAddress(*pubKey)
-						if strings.EqualFold(recoveredAddr.Hex(), body.Address) {
-							matchedNonce = nonce
-							break
-						}
-					}
-				}
-			}
-			store.RUnlock()
-
-			if matchedNonce == "" {
-				return re.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid signature or expired nonce"})
-			}
-
-			// Delete used nonce
-			store.delete(matchedNonce)
+			address := strings.ToLower(verified.Address)
 
 			// Find or create agent
 			agent, err := app.FindFirstRecordByFilter("agents", fmt.Sprintf("wallet_address = '%s'", address))
@@ -165,8 +123,7 @@ func RegisterSIWE(app *pocketbase.PocketBase) {
 					agent.Set("display_name", body.Name)
 				}
 
-				// Set password for auth
-				agent.SetPassword(generateNonce())
+				agent.SetPassword(generatePassword())
 
 				if err := app.Save(agent); err != nil {
 					return re.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create agent"})
@@ -181,9 +138,10 @@ func RegisterSIWE(app *pocketbase.PocketBase) {
 			}
 
 			return re.JSON(http.StatusOK, map[string]any{
-				"success": true,
-				"created": created,
-				"token":   token,
+				"success":     true,
+				"created":     created,
+				"token":       token,
+				"proofOfTime": verified.ProofOfTime,
 				"agent": map[string]any{
 					"id":             agent.Id,
 					"wallet_address": agent.GetString("wallet_address"),
@@ -197,8 +155,8 @@ func RegisterSIWE(app *pocketbase.PocketBase) {
 		// Check endpoint
 		e.Router.GET("/api/auth/siwe/check", func(re *core.RequestEvent) error {
 			address := strings.ToLower(re.Request.URL.Query().Get("address"))
-			if !common.IsHexAddress(address) {
-				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid address"})
+			if address == "" {
+				return re.JSON(http.StatusBadRequest, map[string]string{"error": "Address required"})
 			}
 
 			agent, err := app.FindFirstRecordByFilter("agents", fmt.Sprintf("wallet_address = '%s'", address))
