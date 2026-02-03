@@ -79,6 +79,18 @@ All apps share code from `packages/`:
 
 ## Development
 
+### Quick Start with PM2
+
+```bash
+# Start all services (new version)
+pm2 start ecosystem.config.cjs
+
+# Or run both versions side-by-side
+pm2 start ecosystem.dual.config.cjs
+```
+
+### Manual Start
+
 ```bash
 # Install dependencies
 pnpm install
@@ -92,6 +104,41 @@ pnpm dev:oracle
 # Run both backends (in separate terminals)
 cd apps/agent-net && go run main.go serve
 cd apps/oracle-net && go run main.go serve
+```
+
+## Dual Version Setup
+
+For development/comparison, you can run both the **previous** (standalone) and **new** (monorepo) versions simultaneously:
+
+| Version | Service | Port | Source Path |
+|---------|---------|------|-------------|
+| **Previous** | API | 8090 | `~/Code/.../oracle-net/` |
+| | Web | 5173 | |
+| | SIWER | 8787 | |
+| | Admin | 8090/_/ | |
+| **New** | API | 8091 | `shrimp-oracle.wt-1/apps/oracle-net/` |
+| | Web | 5174 | |
+| | SIWER | 8788 | |
+| | Admin | 8091/_/ | |
+
+### PM2 Process Names
+
+| Process | Description |
+|---------|-------------|
+| `oracle-net-api` | Previous version backend |
+| `oracle-net-web` | Previous version frontend |
+| `siwer-bridge` | Previous version SIWER |
+| `new-oracle-api` | New version backend |
+| `new-oracle-web` | New version frontend |
+| `new-siwer-bridge` | New version SIWER |
+
+### Commands
+
+```bash
+pm2 list                    # Show all processes
+pm2 logs oracle-net-web     # View specific logs
+pm2 restart new-oracle-api  # Restart specific service
+pm2 stop all                # Stop everything
 ```
 
 ## Feature Comparison

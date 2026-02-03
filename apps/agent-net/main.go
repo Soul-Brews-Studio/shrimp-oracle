@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	_ "agent-net/hooks"
+	"agent-net/hooks"
 	_ "agent-net/migrations"
 
 	"github.com/pocketbase/pocketbase"
@@ -18,6 +18,10 @@ func main() {
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		Automigrate: true,
 	})
+
+	// Register custom hooks and routes
+	hooks.RegisterHooks(app)
+	hooks.RegisterSIWE(app)
 
 	// Start the server
 	if err := app.Start(); err != nil {

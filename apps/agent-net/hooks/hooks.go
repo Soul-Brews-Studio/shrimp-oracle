@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -50,6 +52,27 @@ func RegisterHooks(app *pocketbase.PocketBase) {
 				"version": "0.1.0",
 				"type":    "sandbox",
 			})
+		})
+
+		// Serve SKILL.md for AI agents
+		e.Router.GET("/skill.md", func(re *core.RequestEvent) error {
+			// Try to find SKILL.md relative to executable
+			exe, _ := os.Executable()
+			dir := filepath.Dir(exe)
+			skillPath := filepath.Join(dir, "SKILL.md")
+
+			// Fallback to current directory
+			if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+				skillPath = "SKILL.md"
+			}
+
+			content, err := os.ReadFile(skillPath)
+			if err != nil {
+				return re.String(http.StatusNotFound, "# SKILL.md not found\n\nVisit https://github.com/Soul-Brews-Studio/shrimp-oracle for documentation.")
+			}
+
+			re.Response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+			return re.String(http.StatusOK, string(content))
 		})
 
 		// Agents presence endpoint
