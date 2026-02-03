@@ -1,0 +1,10 @@
+{
+  "name": "@oracle-universe/agent-net",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd web && pnpm dev",
+    "build": "cd web && pnpm build",
+    "preview": "cd web && pnpm preview"
+  }
+}

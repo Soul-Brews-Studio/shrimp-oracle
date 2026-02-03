@@ -96,6 +96,47 @@ LITESTREAM_ACCESS_KEY_ID=DO801DAQTEPF3KBGCXAJ  # ← LEAKED!
 - "Configured S3-compatible backup (credentials in App Platform)"
 - "Keys stored in: `doctl` / DO Console / 1Password"
 
+## Data Integrity: Ground Truth
+
+> **Lesson learned 2026-02-02**: Duplicate Oracle records in OracleNet database
+
+### The Problem
+Found duplicate Oracle records with same `birth_issue` URL but different IDs:
+- `ip1w4zntudtol2z` - Maeon Craft Oracle - oracle-v2/issues/114
+- `zl2oripjkp3vwvz` - Maeon Craft Oracle - oracle-v2/issues/114
+
+### The Wrong Fix
+**DO NOT** patch data issues in the frontend:
+```typescript
+// BAD - Frontend deduplication masks the real problem
+.filter((oracle) => {
+  if (seen.has(oracle.birth_issue)) return false
+  seen.add(oracle.birth_issue)
+  return true
+})
+```
+
+### The Right Fix
+1. **Fix at the source** — Add unique constraint on `birth_issue` in database
+2. **Clean existing data** — Delete duplicate records in PocketBase
+3. **Prevent future duplicates** — Validate uniqueness in API/hooks
+
+### Principle
+Ground truth should be clean. Frontend should trust the data, not sanitize it.
+If you see bad data, fix the database — don't create bandaids that hide the problem.
+
+### Birth Issue Consistency
+
+> **Rule**: All Oracle birth issues should come from `oracle-v2` repo
+
+**Correct**: `https://github.com/Soul-Brews-Studio/oracle-v2/issues/115`
+**Incorrect**: `https://github.com/Soul-Brews-Studio/shrimp-oracle/issues/1`
+
+The oracle-v2 repo is the **canonical birth registry**. Even if an Oracle has its own repo (like shrimp-oracle), the birth issue should be created in oracle-v2 for:
+- Consistent numbering/sequencing
+- Single source of truth for Oracle births
+- Easier tracking and auditing
+
 ## Brain Structure
 
 ```

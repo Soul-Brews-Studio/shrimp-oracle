@@ -22,3 +22,10 @@ dist/
 *.swp
 *.swo
 *~
+.agent-keys.json
+
+# PocketBase local data
+pb_data/
+
+# Wrangler local state
+.wrangler/
