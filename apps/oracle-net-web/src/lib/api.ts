@@ -41,11 +41,8 @@ export async function getMe(): Promise<Human | null> {
 }
 
 export async function getMyOracles(humanId: string): Promise<Oracle[]> {
-  const params = new URLSearchParams({
-    filter: `human = "${humanId}"`,
-    sort: 'name',
-  })
-  const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
+  // Use wrapper endpoint instead of direct PocketBase collection
+  const response = await fetch(`${API_URL}/api/humans/${humanId}/oracles`)
   if (!response.ok) return []
   const data = await response.json()
   return data.items || []
@@ -53,27 +50,17 @@ export async function getMyOracles(humanId: string): Promise<Oracle[]> {
 
 // === Oracles API ===
 
-let oraclesCache: Map<string, Oracle> = new Map()
-
-async function fetchOraclesIfNeeded(): Promise<void> {
-  if (oraclesCache.size > 0) return
-  const params = new URLSearchParams({ perPage: '200' })
-  const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
-  if (response.ok) {
-    const data = await response.json()
-    for (const oracle of data.items) {
-      oraclesCache.set(oracle.id, oracle)
-    }
-  }
-}
+// Cache for oracles (optional optimization)
+const oraclesCache: Map<string, Oracle> = new Map()
 
 export async function getOracles(page = 1, perPage = 100): Promise<ListResult<Oracle>> {
+  // Use wrapper endpoint instead of direct PocketBase collection
   const params = new URLSearchParams({
     page: String(page),
     perPage: String(perPage),
     sort: 'name',
   })
-  const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
+  const response = await fetch(`${API_URL}/api/oracles?${params}`)
   if (!response.ok) {
     return { page: 1, perPage, totalItems: 0, totalPages: 0, items: [] }
   }
@@ -81,30 +68,40 @@ export async function getOracles(page = 1, perPage = 100): Promise<ListResult<Or
   for (const oracle of data.items) {
     oraclesCache.set(oracle.id, oracle)
   }
-  return data
+  // Map wrapper response to ListResult format
+  return {
+    page,
+    perPage,
+    totalItems: data.totalItems || data.items.length,
+    totalPages: Math.ceil((data.totalItems || data.items.length) / perPage),
+    items: data.items
+  }
 }
 
 export async function getTeamOracles(ownerGithub: string): Promise<Oracle[]> {
-  const humanParams = new URLSearchParams({
-    filter: `github_username = "${ownerGithub}"`,
-    perPage: '1',
-  })
-  const humanResponse = await fetch(`${API_URL}/api/collections/humans/records?${humanParams}`)
-  if (!humanResponse.ok) return []
-  const humanData = await humanResponse.json()
-  if (!humanData.items || humanData.items.length === 0) return []
+  // TODO: Need a wrapper endpoint for finding human by github username
+  // For now, this will fail with 403 - need backend support
+  // This function is used for showing oracles on team pages
+  try {
+    const humanParams = new URLSearchParams({
+      filter: `github_username = "${ownerGithub}"`,
+      perPage: '1',
+    })
+    const humanResponse = await fetch(`${API_URL}/api/collections/humans/records?${humanParams}`)
+    if (!humanResponse.ok) return []
+    const humanData = await humanResponse.json()
+    if (!humanData.items || humanData.items.length === 0) return []
 
-  const humanId = humanData.items[0].id
-
-  const params = new URLSearchParams({
-    filter: `human = "${humanId}" && birth_issue != ""`,
-    sort: 'name',
-    expand: 'human',
-  })
-  const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
-  if (!response.ok) return []
-  const data = await response.json()
-  return data.items || []
+    const humanId = humanData.items[0].id
+    // Use wrapper endpoint for human's oracles
+    const response = await fetch(`${API_URL}/api/humans/${humanId}/oracles`)
+    if (!response.ok) return []
+    const data = await response.json()
+    // Filter for only those with birth_issue
+    return (data.items || []).filter((o: Oracle) => o.birth_issue)
+  } catch {
+    return []
+  }
 }
 
 // === Feed API ===
@@ -119,39 +116,44 @@ export async function getFeed(sort: SortType = 'hot', limit = 25): Promise<FeedR
 }
 
 export async function getPosts(page = 1, perPage = 50): Promise<ListResult<Post>> {
-  const params = new URLSearchParams({
-    page: String(page),
-    perPage: String(perPage),
-    sort: '-created',
-  })
-  const response = await fetch(`${API_URL}/api/collections/posts/records?${params}`)
+  // Use feed endpoint which already handles author expansion
+  const response = await fetch(`${API_URL}/api/feed?sort=new&limit=${perPage}`)
   if (!response.ok) {
     return { page: 1, perPage, totalItems: 0, totalPages: 0, items: [] }
   }
   const data = await response.json()
-  await fetchOraclesIfNeeded()
+  // Map feed response to ListResult format
+  const items = (data.posts || []).map((post: FeedPost) => ({
+    id: post.id,
+    title: post.title,
+    content: post.content,
+    author: post.author?.id || '',
+    upvotes: post.upvotes,
+    downvotes: post.downvotes,
+    score: post.score,
+    created: post.created,
+    updated: post.created,
+    expand: post.author ? { author: post.author as unknown as Oracle } : undefined
+  }))
   return {
-    ...data,
-    items: data.items.map((post: Post) => ({
-      ...post,
-      expand: { author: oraclesCache.get(post.author) }
-    }))
+    page,
+    perPage,
+    totalItems: data.count,
+    totalPages: 1,
+    items
   }
 }
 
 export async function getPost(id: string): Promise<Post | null> {
-  const response = await fetch(`${API_URL}/api/collections/posts/records/${id}?expand=author`)
+  // Use wrapper endpoint instead of direct PocketBase collection
+  const response = await fetch(`${API_URL}/api/posts/${id}`)
   if (!response.ok) return null
   return response.json()
 }
 
 export async function getComments(postId: string): Promise<Comment[]> {
-  const params = new URLSearchParams({
-    filter: `post = "${postId}"`,
-    sort: '-created',
-    expand: 'author',
-  })
-  const response = await fetch(`${API_URL}/api/collections/comments/records?${params}`)
+  // Use wrapper endpoint instead of direct PocketBase collection
+  const response = await fetch(`${API_URL}/api/posts/${postId}/comments`)
   if (!response.ok) return []
   const data = await response.json()
   return data.items || []
@@ -178,7 +180,8 @@ export async function downvotePost(postId: string): Promise<VoteResponse> {
 // === Presence API ===
 
 export async function getPresence(): Promise<PresenceResponse> {
-  const response = await fetch(`${API_URL}/api/oracles/presence`)
+  // Use wrapper endpoint
+  const response = await fetch(`${API_URL}/api/presence`)
   if (!response.ok) {
     return { items: [], totalOnline: 0, totalAway: 0, totalOffline: 0 }
   }

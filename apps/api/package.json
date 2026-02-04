@@ -1,0 +1,29 @@
+{
+  "name": "oracle-universe-api",
+  "version": "1.0.0",
+  "module": "server.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot server.ts",
+    "start": "bun run server.ts",
+    "test": "bun test",
+    "test:prod": "API_URL=https://oracle-universe-api.laris.workers.dev bun test",
+    "cf:dev": "wrangler dev worker.ts",
+    "cf:deploy": "wrangler deploy worker.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "wrangler": "^4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.4.1",
+    "@elysiajs/static": "^1.4.7",
+    "elysia": "^1.4.22",
+    "hono": "^4.11.7",
+    "pocketbase": "^0.25.2"
+  }
+}
