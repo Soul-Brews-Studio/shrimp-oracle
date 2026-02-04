@@ -1,6 +1,7 @@
 /**
  * Oracle Universe API - CloudFlare Workers
  *
+ * Uses Hono JSX for HTML pages (like arthur-oracle pattern)
  * Environment variables (set in wrangler.toml):
  * - POCKETBASE_URL: PocketBase backend URL
  */
@@ -9,57 +10,9 @@ import { Elysia } from 'elysia'
 import { cors } from '@elysiajs/cors'
 import { CloudflareAdapter } from 'elysia/adapter/cloudflare-worker'
 import { openApiSpec } from './lib/openapi'
+import { uiApp } from './ui'
 
 const PB_URL = 'https://urchin-app-csg5x.ondigitalocean.app'
-
-// Landing page HTML
-const landingHTML = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Oracle Universe API</title>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦐</text></svg>"/>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; background: linear-gradient(135deg, #0f172a, #1e293b); min-height: 100vh; color: #e2e8f0; display: flex; align-items: center; justify-content: center; }
-    .container { max-width: 600px; padding: 2rem; text-align: center; }
-    h1 { font-size: 2.5rem; margin-bottom: 1rem; background: linear-gradient(90deg, #a78bfa, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    p { color: #94a3b8; margin-bottom: 2rem; }
-    .links { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-    a { color: #a78bfa; text-decoration: none; padding: 0.75rem 1.5rem; border: 1px solid rgba(167,139,250,0.3); border-radius: 8px; transition: all 0.2s; }
-    a:hover { background: rgba(167,139,250,0.1); border-color: rgba(167,139,250,0.5); }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🦐 Oracle Universe API</h1>
-    <p>Elysia wrapper for PocketBase. Part of the Oracle family.</p>
-    <div class="links">
-      <a href="/docs">📚 API Docs</a>
-      <a href="/openapi.json">📋 OpenAPI</a>
-      <a href="/api">🔌 API Info</a>
-      <a href="/api/stats">📊 Stats</a>
-    </div>
-  </div>
-</body>
-</html>`
-
-// Docs page with Scalar
-const docsHTML = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Oracle Universe API - Docs</title>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>"/>
-  <style>body { margin: 0; padding: 0; }</style>
-</head>
-<body>
-  <script id="api-reference" data-url="/openapi.json" data-configuration='{"darkMode":true,"defaultOpenAllTags":true}'></script>
-  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
-</body>
-</html>`
 
 // SKILL.md
 const SKILL_MD = `# Oracle Universe API
@@ -81,20 +34,22 @@ See /docs for full interactive documentation.
 const app = new Elysia({ adapter: CloudflareAdapter })
   .use(cors())
 
-  // Landing page
-  .get('/', ({ set }) => {
-    set.headers['Content-Type'] = 'text/html; charset=utf-8'
-    return landingHTML
+  // HTML pages via Hono JSX (proper encoding, no broken emojis)
+  .get('/', async ({ request }) => {
+    const res = await uiApp.fetch(request)
+    return new Response(res.body, { headers: res.headers })
   })
-
-  // Docs page (Scalar)
-  .get('/docs', ({ set }) => {
-    set.headers['Content-Type'] = 'text/html; charset=utf-8'
-    return docsHTML
+  .get('/docs', async ({ request }) => {
+    const res = await uiApp.fetch(request)
+    return new Response(res.body, { headers: res.headers })
   })
-  .get('/swagger', ({ set }) => {
-    set.headers['Content-Type'] = 'text/html; charset=utf-8'
-    return docsHTML
+  .get('/swagger', async ({ request }) => {
+    const res = await uiApp.fetch(request)
+    return new Response(res.body, { headers: res.headers })
+  })
+  .get('/health', async ({ request }) => {
+    const res = await uiApp.fetch(request)
+    return new Response(res.body, { headers: res.headers })
   })
 
   // OpenAPI spec
