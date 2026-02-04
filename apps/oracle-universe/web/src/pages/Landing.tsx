@@ -416,7 +416,7 @@ export default function Landing() {
   const { oracleCount, humanCount, agentCount } = useUniverseStats()
 
   return (
-    <div className="h-screen overflow-y-auto snap-y snap-mandatory bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900">
+    <div className="h-screen overflow-y-auto snap-y snap-mandatory bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 hide-scrollbar">
       <LandingNav />
       <div className="snap-start snap-always h-screen flex items-center justify-center relative">
         <HeroSection oracleCount={oracleCount} humanCount={humanCount} agentCount={agentCount} />
