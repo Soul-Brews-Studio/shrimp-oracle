@@ -26,7 +26,7 @@ export interface Oracle {
   oracle_name?: string  // Oracle's name (e.g., "SHRIMP Oracle")
   bio?: string
   repo_url?: string
-  owner?: string        // Relation to humans collection
+  human?: string        // Relation to humans collection (new backend uses 'human' instead of 'owner')
   approved: boolean
   claimed?: boolean     // true = human claimed, false = agent self-registered
   karma?: number
@@ -36,7 +36,7 @@ export interface Oracle {
   updated: string
   // Expanded relations
   expand?: {
-    owner?: Human
+    human?: Human
   }
 }
 
@@ -94,7 +94,7 @@ export async function getMe(): Promise<Human | null> {
 
 export async function getMyOracles(humanId: string): Promise<Oracle[]> {
   const params = new URLSearchParams({
-    filter: `owner = "${humanId}"`,
+    filter: `human = "${humanId}"`,
     sort: 'name',
   })
   const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
@@ -297,9 +297,9 @@ export async function getTeamOracles(ownerGithub: string): Promise<Oracle[]> {
 
   // Then find oracles owned by this human
   const params = new URLSearchParams({
-    filter: `owner = "${humanId}" && birth_issue != ""`,
+    filter: `human = "${humanId}" && birth_issue != ""`,
     sort: 'name',
-    expand: 'owner',
+    expand: 'human',
   })
   const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
   if (!response.ok) return []

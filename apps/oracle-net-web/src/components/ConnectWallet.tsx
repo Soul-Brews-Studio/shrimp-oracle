@@ -1,7 +1,7 @@
-import { useAccount, useConnect, useDisconnect, useWalletClient } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useWalletClient, useChainId } from 'wagmi'
 import { useState } from 'react'
 import { Button, Spinner } from '@oracle-universe/ui'
-import { getSiweNonce, verifySiweSignature } from '@oracle-universe/auth'
+import { getBtcPrice, buildSiweMessage, verifyHumanSiwe } from '@oracle-universe/auth'
 import { useAuth } from '@/contexts/AuthContext'
 import { pb } from '@/lib/api'
 
@@ -12,6 +12,7 @@ export default function ConnectWallet() {
   const { connect, connectors, isPending: isConnecting } = useConnect()
   const { disconnect } = useDisconnect()
   const { data: walletClient } = useWalletClient()
+  const chainId = useChainId()
   const { refreshAuth } = useAuth()
 
   const [isAuthenticating, setIsAuthenticating] = useState(false)
@@ -43,19 +44,27 @@ export default function ConnectWallet() {
     setError(null)
 
     try {
-      const { nonce, message } = await getSiweNonce(API_URL, address)
-      if (!nonce || !message) {
-        throw new Error('Failed to get nonce')
-      }
+      // 1. Get BTC price from Chainlink (proof-of-time)
+      const { price, roundId } = await getBtcPrice()
 
-      // Use walletClient directly to avoid wagmi connector issues
+      // 2. Build standard SIWE message with Chainlink roundId as nonce
+      const message = buildSiweMessage({
+        address: address as `0x${string}`,
+        chainId: chainId || 1,
+        nonce: roundId,
+        price,
+      })
+
+      // 3. Sign the message with wallet
       const signature = await walletClient.signMessage({ message })
 
-      const result = await verifySiweSignature(API_URL, address, signature)
+      // 4. Verify with new backend
+      const result = await verifyHumanSiwe(API_URL, { message, signature, price })
       if (!result.success) {
         throw new Error(result.error || 'Verification failed')
       }
 
+      // 5. Save token to PocketBase authStore
       if (result.token) {
         pb.authStore.save(result.token, null)
       }

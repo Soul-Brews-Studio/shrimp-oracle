@@ -42,7 +42,7 @@ export async function getMe(): Promise<Human | null> {
 
 export async function getMyOracles(humanId: string): Promise<Oracle[]> {
   const params = new URLSearchParams({
-    filter: `owner = "${humanId}"`,
+    filter: `human = "${humanId}"`,
     sort: 'name',
   })
   const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
@@ -97,9 +97,9 @@ export async function getTeamOracles(ownerGithub: string): Promise<Oracle[]> {
   const humanId = humanData.items[0].id
 
   const params = new URLSearchParams({
-    filter: `owner = "${humanId}" && birth_issue != ""`,
+    filter: `human = "${humanId}" && birth_issue != ""`,
     sort: 'name',
-    expand: 'owner',
+    expand: 'human',
   })
   const response = await fetch(`${API_URL}/api/collections/oracles/records?${params}`)
   if (!response.ok) return []
