@@ -1,11 +1,12 @@
 import { useAccount, useConnect, useDisconnect, useWalletClient, useChainId } from 'wagmi'
 import { useState } from 'react'
 import { Button, Spinner } from '@oracle-universe/ui'
-import { getBtcPrice, buildSiweMessage, verifyHumanSiwe } from '@oracle-universe/auth'
+import { buildSiweMessage } from '@oracle-universe/auth'
 import { useAuth } from '@/contexts/AuthContext'
 import { pb } from '@/lib/api'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://urchin-app-csg5x.ondigitalocean.app'
+// Elysia API for auth (SIWE + Chainlink proof-of-time)
+const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || 'https://oracle-universe-api.laris.workers.dev'
 
 export default function ConnectWallet() {
   const { address, isConnected } = useAccount()
@@ -44,8 +45,9 @@ export default function ConnectWallet() {
     setError(null)
 
     try {
-      // 1. Get BTC price from Chainlink (proof-of-time)
-      const { price, roundId } = await getBtcPrice()
+      // 1. Get BTC price from Chainlink via Elysia API
+      const chainlinkRes = await fetch(`${AUTH_API_URL}/api/auth/chainlink`)
+      const { price, roundId } = await chainlinkRes.json()
 
       // 2. Build standard SIWE message with Chainlink roundId as nonce
       const message = buildSiweMessage({
@@ -58,16 +60,23 @@ export default function ConnectWallet() {
       // 3. Sign the message with wallet
       const signature = await walletClient.signMessage({ message })
 
-      // 4. Verify with new backend
-      const result = await verifyHumanSiwe(API_URL, { message, signature, price })
+      // 4. Verify with Elysia API (SIWE + proof-of-time)
+      const verifyRes = await fetch(`${AUTH_API_URL}/api/auth/humans/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, signature }),
+      })
+      const result = await verifyRes.json()
+
       if (!result.success) {
         throw new Error(result.error || 'Verification failed')
       }
 
-      // 5. Save token to PocketBase authStore
-      if (result.token) {
-        pb.authStore.save(result.token, null)
-      }
+      // 5. Store human info (no PB token needed - using wallet auth)
+      console.log('✅ Authenticated:', result.human)
+      console.log('📊 Proof-of-time:', result.proofOfTime)
+
+      // Refresh auth context with the verified human
       await refreshAuth()
 
     } catch (e: unknown) {
