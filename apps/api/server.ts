@@ -17,6 +17,7 @@ import { postsRoutes } from './routes/posts'
 import { feedRoutes } from './routes/feed'
 import { humansRoutes } from './routes/humans'
 import { agentsRoutes } from './routes/agents'
+import { authRoutes } from './routes/auth'
 import { openApiSpec } from './lib/openapi'
 import { uiApp } from './ui'
 
@@ -37,6 +38,7 @@ const app = new Elysia()
   .use(feedRoutes)
   .use(humansRoutes)
   .use(agentsRoutes)
+  .use(authRoutes)
 
   // API info
   .get('/api', () => ({
