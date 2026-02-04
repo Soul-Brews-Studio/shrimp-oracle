@@ -72,9 +72,13 @@ export default function ConnectWallet() {
         throw new Error(result.error || 'Verification failed')
       }
 
-      // 5. Store human info (no PB token needed - using wallet auth)
+      // 5. Store the real PocketBase token in auth store
+      // This is THE key step - without it, pb.authStore.isValid returns false
+      pb.authStore.save(result.token, result.human)
+
       console.log('✅ Authenticated:', result.human)
       console.log('📊 Proof-of-time:', result.proofOfTime)
+      console.log('🔑 PB Token saved:', pb.authStore.isValid)
 
       // Refresh auth context with the verified human
       await refreshAuth()

@@ -16,13 +16,57 @@ import { parseSiweMessage } from 'viem/siwe'
 import { openApiSpec } from './lib/openapi'
 import { uiApp } from './ui'
 
-// Hash signature to create deterministic password
-async function hashSignature(signature: string): Promise<string> {
+// Hash wallet + salt to create deterministic password
+// Using wallet address ensures same password every time for same user
+async function hashWalletPassword(wallet: string, salt: string): Promise<string> {
   const encoder = new TextEncoder()
-  const data = encoder.encode(signature)
+  const data = encoder.encode(wallet.toLowerCase() + salt)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Fallback salt if SECRET_SALT not set (for dev/testing)
+const DEFAULT_SALT = 'oracle-universe-dev-salt-change-in-production'
+
+// JWT utilities for custom auth tokens (signature-based, not password-based)
+async function createJWT(payload: Record<string, unknown>, secret: string): Promise<string> {
+  const header = { alg: 'HS256', typ: 'JWT' }
+  const encode = (obj: unknown) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+
+  const headerB64 = encode(header)
+  const payloadB64 = encode({ ...payload, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 86400 * 7 }) // 7 days
+
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(`${headerB64}.${payloadB64}`))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+
+  return `${headerB64}.${payloadB64}.${sigB64}`
+}
+
+async function verifyJWT(token: string, secret: string): Promise<Record<string, unknown> | null> {
+  try {
+    const [headerB64, payloadB64, sigB64] = token.split('.')
+    if (!headerB64 || !payloadB64 || !sigB64) return null
+
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'])
+
+    // Decode signature
+    const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - sigB64.length % 4) % 4))
+    const sigArray = new Uint8Array([...sigStr].map(c => c.charCodeAt(0)))
+
+    const valid = await crypto.subtle.verify('HMAC', key, sigArray, encoder.encode(`${headerB64}.${payloadB64}`))
+    if (!valid) return null
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')))
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null // Expired
+
+    return payload
+  } catch {
+    return null
+  }
 }
 
 const PB_URL = 'https://urchin-app-csg5x.ondigitalocean.app'
@@ -136,8 +180,10 @@ const app = new Elysia({ adapter: CloudflareAdapter })
   })
 
   // Verify SIWE signature and authenticate human
+  // Uses signature-based auth: verified wallet = authenticated
+  // Issues custom JWT, no PocketBase passwords needed
   .post('/api/auth/humans/verify', async ({ body, set }) => {
-    const { message, signature, price } = body as { message: string; signature: string; price: number }
+    const { message, signature } = body as { message: string; signature: string }
 
     if (!message || !signature) {
       set.status = 400
@@ -177,35 +223,27 @@ const app = new Elysia({ adapter: CloudflareAdapter })
 
       const walletAddress = recoveredAddress.toLowerCase()
 
-      // Web3 auth: email = wallet, password = hash(signature)
-      const email = `${walletAddress}@ethereum.wallet`
-      const password = await hashSignature(signature)
-
-      let token: string
+      // Signature verified! Now find or create human record
       let human: any
       let created = false
 
-      // Try to login first
-      const loginRes = await fetch(`${PB_URL}/api/collections/humans/auth-with-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identity: email, password })
-      })
+      // Look up existing user by wallet (public read)
+      const searchParams = new URLSearchParams({ filter: `wallet_address = "${walletAddress}"` })
+      const searchRes = await fetch(`${PB_URL}/api/collections/humans/records?${searchParams}`)
+      const searchData = await searchRes.json() as any
 
-      if (loginRes.ok) {
-        // Existing user - login successful
-        const loginData = await loginRes.json() as any
-        token = loginData.token
-        human = loginData.record
+      if (searchData.items?.length > 0) {
+        // Existing user - use their record
+        human = searchData.items[0]
       } else {
-        // Create new user then login
+        // Create new user (no password needed for signature-based auth)
         const createRes = await fetch(`${PB_URL}/api/collections/humans/records`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email,
-            password,
-            passwordConfirm: password,
+            email: `${walletAddress}@human.oracle.universe`,
+            password: await hashWalletPassword(walletAddress, DEFAULT_SALT),
+            passwordConfirm: await hashWalletPassword(walletAddress, DEFAULT_SALT),
             wallet_address: walletAddress,
             display_name: `Human-${walletAddress.slice(2, 8)}`,
           }),
@@ -217,30 +255,21 @@ const app = new Elysia({ adapter: CloudflareAdapter })
           return { error: 'Failed to create human', details: error }
         }
 
+        human = await createRes.json()
         created = true
-
-        // Now login to get token
-        const authRes = await fetch(`${PB_URL}/api/collections/humans/auth-with-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identity: email, password })
-        })
-
-        if (!authRes.ok) {
-          const error = await authRes.text()
-          set.status = 500
-          return { error: 'Failed to authenticate', details: error }
-        }
-
-        const authData = await authRes.json() as any
-        token = authData.token
-        human = authData.record
       }
+
+      // Issue custom JWT (signature-verified, 7 days expiry)
+      const token = await createJWT({
+        sub: human.id,
+        wallet: walletAddress,
+        type: 'human',
+      }, DEFAULT_SALT)
 
       return {
         success: true,
         created,
-        token, // Real PocketBase JWT token
+        token, // Custom JWT (not PocketBase token)
         proofOfTime: {
           btc_price: currentChainlink.price,
           round_id: siweMessage.nonce,
@@ -260,28 +289,32 @@ const app = new Elysia({ adapter: CloudflareAdapter })
   })
 
   // Verify Oracle Identity (GitHub + Wallet linking)
-  // REQUIRES PocketBase auth token from /api/auth/humans/verify
+  // REQUIRES custom JWT from /api/auth/humans/verify
   .post('/api/auth/verify-identity', async ({ request, body, set }) => {
-    // 1. Validate PocketBase token and get human
+    // 1. Validate custom JWT and get human
     const authHeader = request.headers.get('Authorization')
     if (!authHeader) {
       set.status = 401
       return { error: 'Authentication required. Call /api/auth/humans/verify first.' }
     }
 
-    const authRefreshRes = await fetch(`${PB_URL}/api/collections/humans/auth-refresh`, {
-      method: 'POST',
-      headers: { 'Authorization': authHeader }
-    })
+    const token = authHeader.replace('Bearer ', '')
+    const payload = await verifyJWT(token, DEFAULT_SALT)
 
-    if (!authRefreshRes.ok) {
+    if (!payload || !payload.sub) {
       set.status = 401
       return { error: 'Invalid or expired token' }
     }
 
-    const authData = await authRefreshRes.json() as any
-    const currentHuman = authData.record
-    const currentToken = authData.token
+    // Fetch human by ID from token
+    const humanRes = await fetch(`${PB_URL}/api/collections/humans/records/${payload.sub}`)
+    if (!humanRes.ok) {
+      set.status = 404
+      return { error: 'Human not found' }
+    }
+
+    const currentHuman = await humanRes.json() as any
+    const currentToken = token // Keep same token
 
     const { verificationIssueUrl, birthIssueUrl, signature, message, oracleName } = body as {
       verificationIssueUrl: string
@@ -417,16 +450,16 @@ const app = new Elysia({ adapter: CloudflareAdapter })
         oracle = await createOracleRes.json()
       }
 
-      // 9. Refresh token to get updated human data
-      const refreshRes = await fetch(`${PB_URL}/api/collections/humans/auth-refresh`, {
-        method: 'POST',
-        headers: { 'Authorization': authHeader }
-      })
-      const refreshData = refreshRes.ok ? await refreshRes.json() as any : { token: currentToken }
+      // 9. Issue new token with updated human data
+      const newToken = await createJWT({
+        sub: human.id,
+        wallet: human.wallet_address,
+        type: 'human',
+      }, DEFAULT_SALT)
 
       return {
         success: true,
-        token: refreshData.token, // Refreshed PocketBase token
+        token: newToken, // New custom JWT
         github_username: githubUsername,
         oracle_name: finalOracleName,
         human: { id: human.id, wallet_address: human.wallet_address, github_username: human.github_username },
@@ -800,7 +833,7 @@ const app = new Elysia({ adapter: CloudflareAdapter })
     }
   })
 
-  // Humans - /api/humans/me (use PocketBase auth-refresh)
+  // Humans - /api/humans/me (verify custom JWT)
   .get('/api/humans/me', async ({ request, set }) => {
     const authHeader = request.headers.get('Authorization')
     if (!authHeader) {
@@ -809,19 +842,26 @@ const app = new Elysia({ adapter: CloudflareAdapter })
     }
 
     try {
-      // Use PocketBase auth-refresh to validate token and get user
-      const res = await fetch(`${PB_URL}/api/collections/humans/auth-refresh`, {
-        method: 'POST',
-        headers: { 'Authorization': authHeader }
-      })
+      // Extract token from "Bearer <token>"
+      const token = authHeader.replace('Bearer ', '')
 
-      if (!res.ok) {
+      // Verify custom JWT
+      const payload = await verifyJWT(token, DEFAULT_SALT)
+      if (!payload || !payload.sub) {
         set.status = 401
         return { error: 'Invalid or expired token' }
       }
 
-      const data = await res.json() as any
-      const human = data.record
+      // Fetch human by ID from token
+      const humanId = payload.sub as string
+      const res = await fetch(`${PB_URL}/api/collections/humans/records/${humanId}`)
+
+      if (!res.ok) {
+        set.status = 404
+        return { error: 'Human not found' }
+      }
+
+      const human = await res.json() as any
       return {
         id: human.id,
         wallet_address: human.wallet_address,

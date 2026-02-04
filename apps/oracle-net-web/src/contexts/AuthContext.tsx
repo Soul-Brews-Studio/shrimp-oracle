@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (oracles.length === 0 || !pb.authStore.isValid) return
 
-    const API_URL = import.meta.env.VITE_API_URL || 'https://urchin-app-csg5x.ondigitalocean.app'
+    const API_URL = import.meta.env.VITE_API_URL || 'https://oracle-universe-api.laris.workers.dev'
 
     const sendHeartbeats = async () => {
       for (const oracle of oracles) {

@@ -12,7 +12,8 @@ import type {
   SortType,
 } from '@oracle-universe/types'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://urchin-app-csg5x.ondigitalocean.app'
+// Elysia API wrapper (handles CORS and proxies to PocketBase)
+const API_URL = import.meta.env.VITE_API_URL || 'https://oracle-universe-api.laris.workers.dev'
 
 export const pb = createPocketBaseClient(API_URL)
 
