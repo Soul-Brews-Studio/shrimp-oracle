@@ -66,23 +66,9 @@ func verifySIWE(message, signature string, price float64) (*SiwerVerifyResponse,
 }
 
 // RegisterSIWE sets up SIWE authentication routes for both realms
+// Note: /nonce endpoint removed - client calls Chainlink directly via viem
 func RegisterSIWE(app *pocketbase.PocketBase) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
-		// Shared nonce endpoint - proxy to siwer /nonce
-		e.Router.GET("/api/auth/siwe/nonce", func(re *core.RequestEvent) error {
-			resp, err := http.Get(siwerURL + "/nonce")
-			if err != nil {
-				return re.JSON(http.StatusBadGateway, map[string]string{"error": "Failed to get nonce"})
-			}
-			defer resp.Body.Close()
-
-			data, _ := io.ReadAll(resp.Body)
-			var result map[string]any
-			json.Unmarshal(data, &result)
-
-			return re.JSON(http.StatusOK, result)
-		})
-
 		// ========== AGENT AUTH ==========
 
 		e.Router.POST("/api/auth/agents/verify", func(re *core.RequestEvent) error {

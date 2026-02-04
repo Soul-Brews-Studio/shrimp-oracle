@@ -17,5 +17,11 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "18.3.17",
+      "@types/react-dom": "18.3.5"
+    }
   }
 }

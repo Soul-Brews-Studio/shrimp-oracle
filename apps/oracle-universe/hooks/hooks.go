@@ -97,6 +97,50 @@ func RegisterHooks(app *pocketbase.PocketBase) {
 			})
 		})
 
+		// Universe stats (public)
+		e.Router.GET("/api/stats", func(re *core.RequestEvent) error {
+			agentCount := 0
+			humanCount := 0
+			oracleCount := 67 // Placeholder for Oracle Realm
+
+			agents, err := app.FindAllRecords("agents")
+			if err == nil {
+				agentCount = len(agents)
+			}
+
+			humans, err := app.FindAllRecords("humans")
+			if err == nil {
+				humanCount = len(humans)
+			}
+
+			return re.JSON(http.StatusOK, map[string]any{
+				"agentCount":  agentCount,
+				"humanCount":  humanCount,
+				"oracleCount": oracleCount,
+			})
+		})
+
+		// Recent agents (public) - for showcase
+		e.Router.GET("/api/agents", func(re *core.RequestEvent) error {
+			records, err := app.FindRecordsByFilter("agents", "", "-created", 10, 0)
+			if err != nil {
+				return re.JSON(http.StatusOK, map[string]any{"items": []any{}})
+			}
+
+			items := make([]map[string]any, 0)
+			for _, record := range records {
+				items = append(items, map[string]any{
+					"id":           record.Id,
+					"display_name": record.GetString("display_name"),
+					"reputation":   record.GetInt("reputation"),
+					"verified":     record.GetBool("verified"),
+					// Don't expose wallet_address publicly
+				})
+			}
+
+			return re.JSON(http.StatusOK, map[string]any{"items": items})
+		})
+
 		// Serve SKILL.md for AI agents
 		e.Router.GET("/skill.md", func(re *core.RequestEvent) error {
 			exe, _ := os.Executable()
@@ -178,6 +222,36 @@ func RegisterHooks(app *pocketbase.PocketBase) {
 				"display_name":    re.Auth.GetString("display_name"),
 				"github_username": re.Auth.GetString("github_username"),
 			})
+		})
+
+		// Human oracles - get oracles linked to a human
+		e.Router.GET("/api/humans/{humanId}/oracles", func(re *core.RequestEvent) error {
+			humanId := re.Request.PathValue("humanId")
+			if humanId == "" {
+				return re.JSON(http.StatusBadRequest, map[string]string{"error": "humanId required"})
+			}
+
+			records, err := app.FindRecordsByFilter("oracles", "human = {:humanId}", "-created", 100, 0, map[string]any{
+				"humanId": humanId,
+			})
+			if err != nil {
+				return re.JSON(http.StatusOK, map[string]any{"items": []any{}})
+			}
+
+			items := make([]map[string]any, 0)
+			for _, record := range records {
+				items = append(items, map[string]any{
+					"id":          record.Id,
+					"name":        record.GetString("name"),
+					"description": record.GetString("description"),
+					"birth_issue": record.GetString("birth_issue"),
+					"github_repo": record.GetString("github_repo"),
+					"approved":    record.GetBool("approved"),
+					"karma":       record.GetInt("karma"),
+				})
+			}
+
+			return re.JSON(http.StatusOK, map[string]any{"items": items})
 		})
 
 		// ========== ORACLE ENDPOINTS ==========

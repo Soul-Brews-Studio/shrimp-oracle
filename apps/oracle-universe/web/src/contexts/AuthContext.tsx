@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { useAccount, useWalletClient } from 'wagmi'
-import { getNonce, verifyAgent, verifyHuman, buildSiweMessage, Agent, Human, ProofOfTime } from '../lib/api'
+import { getChainlinkNonce, verifyAgent, verifyHuman, buildSiweMessage, getHumanOracles, Agent, Human, Oracle, ProofOfTime } from '../lib/api'
 
 type Realm = 'agent' | 'human' | null
 
@@ -9,6 +9,7 @@ interface AuthState {
   token: string | null
   agent: Agent | null
   human: Human | null
+  oracles: Oracle[]
   proofOfTime: ProofOfTime | null
 }
 
@@ -18,6 +19,7 @@ interface AuthContextType extends AuthState {
   signInAsAgent: () => Promise<void>
   signInAsHuman: () => Promise<void>
   signOut: () => void
+  refreshOracles: () => Promise<void>
   loading: boolean
   error: string | null
 }
@@ -33,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token: null,
     agent: null,
     human: null,
+    oracles: [],
     proofOfTime: null,
   })
   const [loading, setLoading] = useState(false)
@@ -48,8 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      // Get nonce from siwe-service
-      const nonceData = await getNonce()
+      // Get nonce directly from Chainlink (no backend needed)
+      const nonceData = await getChainlinkNonce()
 
       // Build message
       const domain = 'siwe-service.laris.workers.dev'
@@ -67,11 +70,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(result.error || 'Verification failed')
       }
 
+      // Fetch oracles if signing in as human
+      let oracles: Oracle[] = []
+      if (realm === 'human' && result.human?.id) {
+        oracles = await getHumanOracles(result.human.id)
+      }
+
       setState({
         realm,
         token: result.token,
         agent: result.agent || null,
         human: result.human || null,
+        oracles,
         proofOfTime: result.proofOfTime || null,
       })
     } catch (err) {
@@ -90,9 +100,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token: null,
       agent: null,
       human: null,
+      oracles: [],
       proofOfTime: null,
     })
   }, [])
+
+  const refreshOracles = useCallback(async () => {
+    if (state.human?.id) {
+      const oracles = await getHumanOracles(state.human.id)
+      setState(prev => ({ ...prev, oracles }))
+    }
+  }, [state.human?.id])
 
   return (
     <AuthContext.Provider
@@ -103,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInAsAgent,
         signInAsHuman,
         signOut,
+        refreshOracles,
         loading,
         error,
       }}
