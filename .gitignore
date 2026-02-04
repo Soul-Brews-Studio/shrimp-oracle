@@ -29,3 +29,4 @@ pb_data/
 
 # Wrangler local state
 .wrangler/
+apps/_archive/oracle-net/oracle-net
