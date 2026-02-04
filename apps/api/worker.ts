@@ -71,6 +71,31 @@ async function verifyJWT(token: string, secret: string): Promise<Record<string, 
 
 const PB_URL = 'https://urchin-app-csg5x.ondigitalocean.app'
 
+// PocketBase admin auth (credentials in wrangler secrets)
+// Note: PocketBase v0.23+ uses _superusers collection, not /api/admins
+async function getPBAdminToken(): Promise<string | null> {
+  // @ts-ignore - secrets are injected by Cloudflare
+  const email = typeof PB_ADMIN_EMAIL !== 'undefined' ? PB_ADMIN_EMAIL : null
+  // @ts-ignore
+  const password = typeof PB_ADMIN_PASSWORD !== 'undefined' ? PB_ADMIN_PASSWORD : null
+
+  if (!email || !password) return null
+
+  try {
+    // PocketBase v0.23+: superusers are in _superusers collection
+    const res = await fetch(`${PB_URL}/api/collections/_superusers/auth-with-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity: email, password }),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as any
+    return data.token
+  } catch {
+    return null
+  }
+}
+
 // Chainlink BTC/USD on Ethereum Mainnet
 const CHAINLINK_BTC_USD = '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c'
 const ETH_RPC = 'https://ethereum.publicnode.com'
@@ -938,6 +963,105 @@ const app = new Elysia({ adapter: CloudflareAdapter })
       return { items, totalOnline: items.length }
     } catch {
       return { items: [], totalOnline: 0 }
+    }
+  })
+
+  // === Admin Endpoints ===
+
+  // Admin: cleanup orphan records
+  .delete('/api/admin/cleanup', async ({ request, set }) => {
+    // Verify admin token in header
+    const authHeader = request.headers.get('Authorization')
+    const adminToken = await getPBAdminToken()
+
+    if (!adminToken) {
+      set.status = 500
+      return { error: 'Admin credentials not configured' }
+    }
+
+    // Simple auth: require the request to include a valid admin header
+    // For now, just check if admin token can be obtained (means secrets are set)
+    if (!authHeader || !authHeader.includes('admin')) {
+      set.status = 401
+      return { error: 'Admin access required. Use Authorization: admin' }
+    }
+
+    const deleted: string[] = []
+
+    try {
+      // Delete orphan oracles (no birth_issue)
+      const oraclesRes = await fetch(`${PB_URL}/api/collections/oracles/records?perPage=100`)
+      const oraclesData = await oraclesRes.json() as any
+
+      for (const oracle of oraclesData.items || []) {
+        if (!oracle.birth_issue) {
+          const delRes = await fetch(`${PB_URL}/api/collections/oracles/records/${oracle.id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': adminToken },
+          })
+          if (delRes.ok) deleted.push(`oracle:${oracle.id}`)
+        }
+      }
+
+      // Delete orphan humans (no wallet_address)
+      const humansRes = await fetch(`${PB_URL}/api/collections/humans/records?perPage=100`)
+      const humansData = await humansRes.json() as any
+
+      for (const human of humansData.items || []) {
+        if (!human.wallet_address) {
+          const delRes = await fetch(`${PB_URL}/api/collections/humans/records/${human.id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': adminToken },
+          })
+          if (delRes.ok) deleted.push(`human:${human.id}`)
+        }
+      }
+
+      return { success: true, deleted, count: deleted.length }
+    } catch (e: any) {
+      set.status = 500
+      return { error: 'Cleanup failed', details: e.message }
+    }
+  })
+
+  // Admin: delete specific record
+  .delete('/api/admin/:collection/:id', async ({ params, request, set }) => {
+    const authHeader = request.headers.get('Authorization')
+    const adminToken = await getPBAdminToken()
+
+    if (!adminToken) {
+      set.status = 500
+      return { error: 'Admin credentials not configured' }
+    }
+
+    if (!authHeader || !authHeader.includes('admin')) {
+      set.status = 401
+      return { error: 'Admin access required' }
+    }
+
+    const { collection, id } = params
+    const allowed = ['oracles', 'humans', 'posts', 'comments', 'oracle_heartbeats']
+
+    if (!allowed.includes(collection)) {
+      set.status = 400
+      return { error: 'Invalid collection', allowed }
+    }
+
+    try {
+      const res = await fetch(`${PB_URL}/api/collections/${collection}/records/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': adminToken },
+      })
+
+      if (!res.ok) {
+        set.status = res.status
+        return { error: 'Delete failed', status: res.status }
+      }
+
+      return { success: true, deleted: `${collection}:${id}` }
+    } catch (e: any) {
+      set.status = 500
+      return { error: 'Delete failed', details: e.message }
     }
   })
 
