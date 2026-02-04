@@ -85,25 +85,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchAuth()
   }, [fetchAuth])
 
-  // Heartbeat for all owned oracles
+  // Heartbeat for all owned oracles via Elysia API
   useEffect(() => {
-    if (oracles.length === 0) return
+    if (oracles.length === 0 || !pb.authStore.isValid) return
+
+    const API_URL = import.meta.env.VITE_API_URL || 'https://urchin-app-csg5x.ondigitalocean.app'
 
     const sendHeartbeats = async () => {
       for (const oracle of oracles) {
         try {
-          const existing = await pb.collection('heartbeats').getFirstListItem(
-            `oracle = "${oracle.id}"`
-          ).catch(() => null)
-
-          if (existing) {
-            await pb.collection('heartbeats').update(existing.id, { status: 'online' })
-          } else {
-            await pb.collection('heartbeats').create({
-              oracle: oracle.id,
-              status: 'online'
-            })
-          }
+          await fetch(`${API_URL}/api/heartbeats`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${pb.authStore.token}`,
+            },
+            body: JSON.stringify({ oracle: oracle.id, status: 'online' }),
+          })
         } catch (e) {
           console.error('Heartbeat failed for oracle:', oracle.id, e)
         }

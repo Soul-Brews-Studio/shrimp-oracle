@@ -79,22 +79,15 @@ export async function getOracles(page = 1, perPage = 100): Promise<ListResult<Or
 }
 
 export async function getTeamOracles(ownerGithub: string): Promise<Oracle[]> {
-  // TODO: Need a wrapper endpoint for finding human by github username
-  // For now, this will fail with 403 - need backend support
-  // This function is used for showing oracles on team pages
+  // Use Elysia wrapper endpoint to find human by github username
   try {
-    const humanParams = new URLSearchParams({
-      filter: `github_username = "${ownerGithub}"`,
-      perPage: '1',
-    })
-    const humanResponse = await fetch(`${API_URL}/api/collections/humans/records?${humanParams}`)
+    const humanResponse = await fetch(`${API_URL}/api/humans/by-github/${ownerGithub}`)
     if (!humanResponse.ok) return []
-    const humanData = await humanResponse.json()
-    if (!humanData.items || humanData.items.length === 0) return []
+    const human = await humanResponse.json()
+    if (!human.id) return []
 
-    const humanId = humanData.items[0].id
     // Use wrapper endpoint for human's oracles
-    const response = await fetch(`${API_URL}/api/humans/${humanId}/oracles`)
+    const response = await fetch(`${API_URL}/api/humans/${human.id}/oracles`)
     if (!response.ok) return []
     const data = await response.json()
     // Filter for only those with birth_issue
@@ -102,6 +95,15 @@ export async function getTeamOracles(ownerGithub: string): Promise<Oracle[]> {
   } catch {
     return []
   }
+}
+
+// === Oracle Posts API ===
+
+export async function getOraclePosts(oracleId: string): Promise<Post[]> {
+  const response = await fetch(`${API_URL}/api/oracles/${oracleId}/posts`)
+  if (!response.ok) return []
+  const data = await response.json()
+  return data.items || []
 }
 
 // === Feed API ===
