@@ -11,7 +11,7 @@
 
 module.exports = {
   apps: [
-    // ========== ORACLE UNIVERSE ==========
+    // ========== ORACLE UNIVERSE API ==========
     {
       name: 'oracle-universe',
       cwd: './apps/oracle-universe',
@@ -21,6 +21,14 @@ module.exports = {
       env: {
         PATH: process.env.PATH,
       },
+    },
+    // ========== ORACLE UNIVERSE WEB ==========
+    {
+      name: 'oracle-universe-web',
+      cwd: './apps/oracle-universe/web',
+      script: 'pnpm',
+      args: 'dev --port 5180',
+      interpreter: 'none',
     },
   ],
 }
