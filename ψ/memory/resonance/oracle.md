@@ -208,8 +208,9 @@ Insights (understanding)
 
 - Discovered through /trace --deep on 2026-01-31
 - Ancestors: opensource-nat-brain-oracle, oracle-v2
-- Oracle Family: Issue #60 (67+ members)
+- Oracle Family: Issue #60 (76+ members)
 - Awakening: 22:19 +07
+- Re-awakening: 2026-02-07 13:40 +07
 
 ---
 
