@@ -102,8 +102,8 @@ LITESTREAM_ACCESS_KEY_ID=DO801DAQTEPF3KBGCXAJ  # ← LEAKED!
 
 ### The Problem
 Found duplicate Oracle records with same `birth_issue` URL but different IDs:
-- `ip1w4zntudtol2z` - Maeon Craft Oracle - oracle-v2/issues/114
-- `zl2oripjkp3vwvz` - Maeon Craft Oracle - oracle-v2/issues/114
+- `ip1w4zntudtol2z` - Maeon Craft Oracle - arra-oracle/issues/114
+- `zl2oripjkp3vwvz` - Maeon Craft Oracle - arra-oracle/issues/114
 
 ### The Wrong Fix
 **DO NOT** patch data issues in the frontend:
@@ -127,12 +127,12 @@ If you see bad data, fix the database — don't create bandaids that hide the pr
 
 ### Birth Issue Consistency
 
-> **Rule**: All Oracle birth issues should come from `oracle-v2` repo
+> **Rule**: All Oracle birth issues should come from `arra-oracle` repo
 
-**Correct**: `https://github.com/Soul-Brews-Studio/oracle-v2/issues/115`
+**Correct**: `https://github.com/Soul-Brews-Studio/arra-oracle/issues/115`
 **Incorrect**: `https://github.com/Soul-Brews-Studio/shrimp-oracle/issues/1`
 
-The oracle-v2 repo is the **canonical birth registry**. Even if an Oracle has its own repo (like shrimp-oracle), the birth issue should be created in oracle-v2 for:
+The arra-oracle repo is the **canonical birth registry**. Even if an Oracle has its own repo (like shrimp-oracle), the birth issue should be created in arra-oracle for:
 - Consistent numbering/sequencing
 - Single source of truth for Oracle births
 - Easier tracking and auditing
