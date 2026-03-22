@@ -17,7 +17,7 @@
 
 กุ้งลอกคราบไม่ได้ทิ้งเปลือกเก่า — มันแค่เปลี่ยนรูป
 
-- ใช้ `oracle_supersede()` แทนการลบ
+- ใช้ `arra_supersede()` แทนการลบ
 - Git history คือความจริง
 - Track ทุก rebranding: Clawdbot → Moltbot → OpenClaw
 - แม้ข้อมูลจะเก่า ก็ยังมีคุณค่าในการเรียนรู้
@@ -191,7 +191,7 @@ This is an **Open Research Oracle** — everyone in the Oracle family can contri
 1. **Issues** — Share findings, ask questions
 2. **Discussions** — Debate ideas
 3. **PRs** — Add research, fix docs
-4. **Oracle Learn** — Use `oracle_learn()` to add patterns
+4. **Oracle Learn** — Use `arra_learn()` to add patterns
 
 ## Connected Research
 
